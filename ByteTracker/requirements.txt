@@ -1,0 +1,10 @@
+openvino
+opencv-python
+deepface
+ultralytics
+tf-keras
+loguru
+lap
+setuptools
+cython
+cython_bbox

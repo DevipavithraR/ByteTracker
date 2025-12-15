@@ -1,0 +1,6 @@
+pip install -r ./requirements.txt
+source ./venv/bin/activate //for virtual environment
+
+python pipeline.py //to run the script
+
+touch stop.flag //if any emergency or urgent need to stop using this command
