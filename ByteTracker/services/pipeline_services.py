@@ -7,6 +7,8 @@ import tty
 import select   
 import sys
 import subprocess
+import utils.models as models
+
 
 
 def should_stop():
@@ -59,7 +61,7 @@ def run_script(script):
     subprocess.run(["python3", script])
 
 def update_face_model_in_constants():
-    output_dir = Path("runs/detect")
+    output_dir = models.trained_model_base_dir
 
     all_train_dirs = sorted(
         [d for d in output_dir.glob("train*") if d.is_dir()],

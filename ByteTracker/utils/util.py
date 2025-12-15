@@ -2,8 +2,10 @@ import cv2
 import numpy as np
 import time
 import os
-from datetime import datetime
+from datetime import datetime, date
+from utils.db_conn import get_db_connection
 import csv
+
 
 def preprocess_image(image, shape):
     _, _, h, w = shape
@@ -19,19 +21,34 @@ def classify_head_position(pitch, down_threshold=20, up_threshold=-20):
     else:
         return "Forward"
     
-def getdatapath(current_script_dir, backward, data_dir):
-    # Navigate to the parent directory (one level up)
-    parent_dir = os.path.join(current_script_dir, backward)
-    # Resolve the '..' to get the absolute path of the parent directory
-    absolute_parent_dir = os.path.abspath(parent_dir)
+# def getdatapath(current_script_dir, backward, data_dir):
+#     # Navigate to the parent directory (one level up)
+#     parent_dir = os.path.join(current_script_dir, backward)
+#     # Resolve the '..' to get the absolute path of the parent directory
+#     absolute_parent_dir = os.path.abspath(parent_dir)
+
+#     print(f"Parent directory: {absolute_parent_dir}")
+
+#     # Example: Accessing a 'data' folder in the parent directory
+#     data_folder_path = os.path.join(absolute_parent_dir, data_dir)
+#     print(f"Data folder path: {data_folder_path}")
+
+#     return data_folder_path
+
+def getdatapath(current_script_dir, backward='.', data_dir=None):
+    absolute_parent_dir = os.path.abspath(
+        os.path.join(current_script_dir, backward)
+    )
 
     print(f"Parent directory: {absolute_parent_dir}")
 
-    # Example: Accessing a 'data' folder in the parent directory
-    data_folder_path = os.path.join(absolute_parent_dir, data_dir)
-    print(f"Data folder path: {data_folder_path}")
+    if data_dir:
+        data_folder_path = os.path.join(absolute_parent_dir, data_dir)
+        print(f"Data folder path: {data_folder_path}")
+        return data_folder_path
 
-    return data_folder_path
+    return absolute_parent_dir
+
 
 def save_yolo_label(image_path, bbox, img_w, img_h):
     x_min, y_min, x_max, y_max = bbox
@@ -118,4 +135,35 @@ def write_attendance_csv(emp_name, status):
         writer.writerow([date, emp_name, time_now, status])
 
     print(f"✔ Attendance recorded: {emp_name} → {status}")
+
+
+def write_attendance_db(emp_name, status):
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    today = date.today()
+
+    # Prevent duplicate login/logout on same day
+    cur.execute("""
+        SELECT 1 FROM attendance
+        WHERE employee_id = %s
+        AND status = %s
+        AND log_date = %s
+    """, (emp_name, status, today))
+
+    exists = cur.fetchone()
+
+    if not exists:
+        cur.execute("""
+            INSERT INTO attendance (employee_id, status)
+            VALUES (%s, %s)
+        """, (emp_name, status))
+
+        conn.commit()
+        print(f"✔ Attendance recorded: {emp_name} → {status}")
+    else:
+        print(f"ℹ Already recorded: {emp_name} → {status}")
+
+    cur.close()
+    conn.close()
 

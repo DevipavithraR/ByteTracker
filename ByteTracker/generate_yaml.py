@@ -1,15 +1,15 @@
 import yaml
 from pathlib import Path
+from utils import constants
 
-# Get the directory of this script
-current_script_dir = Path(__file__).resolve().parent
+
 
 # FIX: go to project root, then ByteTracker_data/output
-project_root = current_script_dir.parent  # remove this if needed
-dataset_base = project_root / "ByteTracker_data/output"
+project_root = constants.prj_dir  # remove this if needed
+out_dir = constants.output_dir
 
 # Dataset directories
-dataset_dir = dataset_base / "train"
+dataset_dir = out_dir / "train"
 
 # YAML content
 data = {
@@ -20,10 +20,10 @@ data = {
 }
 
 # Output YAML path
-yaml_path = dataset_base / "data.yaml"
+yaml_path = out_dir / "data.yaml"
 
 # Ensure folder exists
-dataset_base.mkdir(parents=True, exist_ok=True)
+out_dir.mkdir(parents=True, exist_ok=True)
 
 with open(yaml_path, "w") as f:
     yaml.dump(data, f)

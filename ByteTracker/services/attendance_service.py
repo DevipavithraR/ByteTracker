@@ -77,11 +77,7 @@ def attendance_service():
                                 sys.exit()
 
                         time.sleep(0.05)
-
-
-
-
-                        time.sleep(1)
+                        # time.sleep(1)
 
             p.terminate()
 

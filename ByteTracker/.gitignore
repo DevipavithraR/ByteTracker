@@ -1,7 +1,7 @@
 # Python virtual environment
 venv/
 .env/
-__pycache__/
+**/__pycache__/
 *.pyc
 
 # ByteTrack folder
@@ -11,14 +11,10 @@ ByteTrack/
 *.log
 .DS_Store
 
-
 # Model weights
 *.pt
 *.pth
 *.onnx
-
-
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

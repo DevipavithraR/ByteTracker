@@ -22,7 +22,7 @@ import utils.constants as constants
 import utils.models as models
 from attendance_logger import mark_login, mark_logout
 from datetime import datetime, timedelta
-from utils.util import write_attendance_db
+
 
 if not hasattr(np, 'float'):
     np.float = float
@@ -38,10 +38,34 @@ if not hasattr(np, 'bool'):
 MIN_FACE_SIZE = 30 
 # lpfid_identity_map = {}  # Maps persistent LPF IDs to recognized person names
 face_memory = []  # stores {embedding, name}
-FACE_VERIFY_TIME = 10  # 2 minutes in seconds
+FACE_VERIFY_TIME = 60  # in seconds
 detected_faces = {}  # {employee_id: {last_seen: datetime, face_start: datetime, verified: bool, logged_in: bool}}
 attendance_state = {}  
 
+# -----------------------
+# ByteTrack Attendance Control
+# -----------------------
+TRACK_TTL = 10  # seconds
+track_registry = {}  
+# track_id -> {
+#   identity,
+#   first_seen,
+#   last_seen,
+#   verified,
+#   logged_in,
+#   logged_out
+# }
+N_FRAMES_STABLE = 5  # Require track to appear for 5 consecutive frames
+
+def cleanup_tracks():
+    now = datetime.now()
+    expired = [
+        tid for tid, data in track_registry.items()
+        if (now - data["last_seen"]).total_seconds() > TRACK_TTL
+    ]
+    for tid in expired:
+        del track_registry[tid]
+        
 def get_embedding(img):
     try:
         emb = DeepFace.represent(img, model_name="ArcFace", enforce_detection=False)
@@ -100,7 +124,6 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
         cap = cv2.VideoCapture(0)  # Open webcam
     else:
         cap = cv2.VideoCapture(video)
-        
         if not cap.isOpened():
             raise FileNotFoundError(f"Could not open video: {video}")
     
@@ -110,11 +133,8 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
     save_counter = 0
     while True:
         ret, frame = cap.read()
-        
         if not ret:
             break
-        unmirrored_frame = cv2.flip(frame, 1)
-        # cv2.imshow('Unmirrored Webcam Feed', unmirrored_frame)
 
         frame_idx += 1
         frame_data = {"frame": frame_idx, "detections": []}
@@ -178,71 +198,70 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
             if face_roi.size == 0:
                 continue
 
-           
-            # -------------------------
-            # 🔹 1. Identify or reuse stored identity
-            # -------------------------
-            
-            try:
-                    # result = DeepFace.find(img_path=face_roi, db_path=faces_dir, enforce_detection=False,align=True,model_name='Facenet', distance_metric='cosine')
-                    # result = DeepFace.find(img_path=face_roi, db_path=faces_dir, enforce_detection=False,align=True,model_name='ArcFace', distance_metric='cosine')
-                   
-                   # 1. Compute embedding for current face
-                    # ---------------------------------------
-                    # FACE RECOGNITION USING EMBEDDING MEMORY
-                    # ---------------------------------------
-                    identity = "Unknown"
+            cleanup_tracks()
+            now = datetime.now()
 
-                    # Compute embedding for current face
-                    embedding = get_embedding(face_roi)
+            # Initialize track entry
+            if track_id not in track_registry:
+                track_registry[track_id] = {
+                    "identity": "Unknown",
+                    "first_seen": now,
+                    "last_seen": now,
+                    "verified": False,
+                    "logged_in": False,
+                    "logged_out": False,
+                    "frame_count": 0  
+                }
 
-                    if embedding is not None:
+            track_data = track_registry[track_id]
+            track_data["frame_count"] += 1
+            track_data["last_seen"] = now
 
-                        best_dist = 999
-                        best_name = None
+            if track_data["frame_count"] < N_FRAMES_STABLE:
+                    continue  # Not stable yet
+    
+            identity = track_data["identity"] 
 
-                        # 1. Compare with memory
-                        for mem in face_memory:
-                            dist = np.linalg.norm(embedding - mem["embedding"])
-                            if dist < best_dist:
-                                best_dist = dist
-                                best_name = mem["name"]
+            # ----------------------------------
+            # 1 FACE RECOGNITION (ONCE PER TRACK)
+            # ----------------------------------
+            if identity == "Unknown":
+                embedding = get_embedding(face_roi)
 
-                        # 2. If match found
-                        THRESHOLD = 0.55
+                if embedding is not None:
+                    best_dist = 999
+                    best_name = None
 
-                        if best_dist < THRESHOLD:
-                            identity = best_name
+                    for mem in face_memory:
+                        dist = np.linalg.norm(embedding - mem["embedding"])
+                        if dist < best_dist:
+                            best_dist = dist
+                            best_name = mem["name"]
 
-                        else:
-                            # 3. Recognize only ONCE using DeepFace
-                            try:
-                                result = DeepFace.find(
-                                    img_path=face_roi,
-                                    db_path=faces_dir,
-                                    model_name="ArcFace",
-                                    distance_metric="cosine",
-                                    enforce_detection=False
+                    if best_dist < 0.55:
+                        identity = best_name
+                    else:
+                        try:
+                            result = DeepFace.find(
+                                img_path=face_roi,
+                                db_path=faces_dir,
+                                model_name="ArcFace",
+                                distance_metric="cosine",
+                                enforce_detection=False
+                            )
+                            if len(result[0]) > 0:
+                                best_match = result[0].iloc[0]
+                                identity = os.path.basename(
+                                    os.path.dirname(best_match["identity"])
                                 )
+                                face_memory.append({
+                                    "name": identity,
+                                    "embedding": embedding
+                                })
+                        except:
+                            identity = "Unknown"
 
-                                if len(result[0]) > 0:
-                                    best_match = result[0].iloc[0]
-                                    identity = os.path.basename(os.path.dirname(best_match["identity"]))
-
-                                    # Store new embedding
-                                    face_memory.append({
-                                        "name": identity,
-                                        "embedding": embedding
-                                    })
-
-                            except:
-                                identity = "Unknown"
-
-
-            except Exception as e:
-                print("Recognition error:", e)
-
-
+                    track_data["identity"] = identity
             # -------------------------
             # 🔹 2. Head pose estimation
             # -------------------------
@@ -266,31 +285,15 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
             # -------------------------
             if identity != "Unknown":
 
-                now = datetime.now()
+                duration = (now - track_data["first_seen"]).total_seconds()
 
-                if identity not in attendance_state:
-                    attendance_state[identity] = {
-                        "first_seen": now,
-                        "verified": False,
-                        "logged_in": False,
-                        "logged_out": False
-                    }
+                if not track_data["verified"] and duration >= FACE_VERIFY_TIME:
+                    track_data["verified"] = True
+                    print(f"✔ Verified {identity} (track {track_id})")
 
-                state = attendance_state[identity]
-
-                # check if visible continuously for 2 minutes
-                if not state["verified"]:
-                    duration = (now - state["first_seen"]).total_seconds()
-
-                    if duration >= FACE_VERIFY_TIME:
-                        state["verified"] = True
-                        print(f"✔ Identity verified for {identity}")
-
-                # If verified, check login/logout state
-                if state["verified"] and not state["logged_in"]:
+                if track_data["verified"] and not track_data["logged_in"]:
 
                     status = get_attendance_status()
-
                     valid_login_status = [
                         "On-time Login",
                         "Grace Late",
@@ -301,21 +304,15 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
                     ]
 
                     if status in valid_login_status:
-                        # write_attendance_csv(identity, status)
-                        write_attendance_db(identity, status)
-                        state["logged_in"] = True
+                        write_attendance_csv(identity, status)
+                        track_data["logged_in"] = True
 
-
-                # Logout marking
-                if state["verified"] and not state["logged_out"]:
+                if track_data["verified"] and not track_data["logged_out"]:
 
                     status = get_attendance_status()
-
                     if status == "Logout":
-                        # write_attendance_csv(identity, "Logout")
-                        write_attendance_db(identity, "Logout")
-
-                        state["logged_out"] = True
+                        write_attendance_csv(identity, "Logout")
+                        track_data["logged_out"] = True
 
             frame_data["detections"].append({
                 # "lpfid": lpfid,
@@ -371,7 +368,7 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
             if frame_data["detections"]:
                 all_frames_data.append(frame_data)
 
-        cv2.imshow("Head-pose demo", unmirrored_frame)
+        cv2.imshow("Head-pose demo", frame)
         if cv2.waitKey(2) & 0xFF == ord("q"):
             break
         save_counter = save_counter + constants.save_once_in_step
