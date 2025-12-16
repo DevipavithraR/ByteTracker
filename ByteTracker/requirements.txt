@@ -8,3 +8,4 @@ lap
 setuptools
 cython
 cython_bbox
+psycopg2

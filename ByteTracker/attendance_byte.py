@@ -14,7 +14,8 @@ from utils.util import save_yolo_label,write_attendance_csv,get_attendance_statu
 sys.path.append(os.path.abspath("ByteTrack"))
 
 # from src.centroid_tracker import CentroidTracker
-from  ByteTrack.yolox.tracker.byte_tracker import BYTETracker as ByteTracker
+from ByteTrack.yolox.tracker.byte_tracker import BYTETracker as ByteTracker
+
 from utils.headpose_confidence import generate_pose_conf
 from utils.headPose_estimator import HeadPoseEstimator
 import utils.util as util
@@ -108,6 +109,7 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
     frame_idx = 0
     all_frames_data = []
     save_counter = 0
+    
     while True:
         ret, frame = cap.read()
         
@@ -157,13 +159,12 @@ def run(pose_model, face_model, video, faces_dir, output_dir, device="CPU"):
         objects = tracker.update(output_results, img_info, img_size)
 
         # cleanup_old_ids()
-       
 
-        for track in objects:
-            tlwh = track.tlwh
-            track_id = track.track_id
-            x_min, y_min, w, h = map(int, tlwh)
-            x_max, y_max = x_min + w, y_min + h
+        # for track in objects:
+        #     tlwh = track.tlwh
+        #     track_id = track.track_id
+        #     x_min, y_min, w, h = map(int, tlwh)
+        #     x_max, y_max = x_min + w, y_min + h
 
 
         for track in objects:

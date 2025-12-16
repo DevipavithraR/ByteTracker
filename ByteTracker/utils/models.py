@@ -10,4 +10,3 @@ pose_model = os.path.join(constants.data_base_dir, "models/head-pose-estimation-
 face_model = os.path.join(constants.data_base_dir, "models/yolov12n-face.pt")
 trained_model_base_dir = os.path.join(constants.data_base_dir, "models/trained")
 trained_model_dir = 'train'
-

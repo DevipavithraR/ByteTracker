@@ -45,3 +45,4 @@ STOP_FILE = "stop.flag"
 IMAGE_DIR = Path(train_images_dir)
 MIN_IMAGES = 5
 first_run = True
+print("constants last:")
